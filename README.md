@@ -102,7 +102,39 @@ YottaFlex_OEE_Project/
 
 ## How to Run
 
-Open a terminal inside the backend folder.
+### Installation (Windows PowerShell)
+
+Clone the repository:
+
+git clone https://github.com/nikithaakula1998-max/YottaFlex_OEE_Project.git
+
+cd YottaFlex_OEE_Project
+
+Create and activate a virtual environment:
+
+py -m venv .venv
+
+.\.venv\Scripts\Activate.ps1
+
+Install dependencies:
+
+python -m pip install -r backend\requirements.txt
+
+python -m pip install -r frontend\requirements.txt
+
+### Dataset Setup
+
+The generated datasets are excluded from GitHub
+because of their size.
+
+Run the dataset generator before starting the API
+or dashboard.
+
+From the backend folder:
+
+cd backend
+
+cd backend
 
 ### Generate the full dataset
 
