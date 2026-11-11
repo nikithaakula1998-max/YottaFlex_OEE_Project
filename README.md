@@ -3,25 +3,29 @@
 
 ## Project Overview
 
-This project generates and analyzes synthetic manufacturing
-data to calculate Overall Equipment Effectiveness (OEE).
+This project generates and analyzes synthetic manufacturing data to calculate Overall Equipment Effectiveness (OEE).
 
 The system includes:
+
 - A deterministic manufacturing data generator
 - Anomaly detection and validation
 - OEE calculation and independent verification
 - Machine-shift time reconciliation
 - A FastAPI backend
 - A Streamlit dashboard
+- SQLite database support
+- Dataset integrity verification using SHA-256 checksums
 
 ## Technologies Used
 
 - Python
 - FastAPI
 - Streamlit
+- SQLite
 - CSV and JSON
 - SHA-256 checksums
 - Python unittest
+- Git and GitHub
 
 ## Full Dataset
 
@@ -39,15 +43,25 @@ The system includes:
 | OEE aggregates | 8,100 |
 | Ground-truth anomalies | 5 |
 
-The dataset is fully synthetic.
+The dataset is fully synthetic and does not contain real manufacturing or personal data.
 
 ## OEE Calculation
 
+Overall Equipment Effectiveness is calculated using three factors.
+
+**Availability**
+
 Availability = Run Time / Planned Production Time
+
+**Performance**
 
 Performance = (Total Units * Ideal Cycle Time) / Run Time
 
+**Quality**
+
 Quality = Good Units / Total Units
+
+**Overall OEE**
 
 OEE = Availability * Performance * Quality
 
@@ -61,28 +75,35 @@ The validator independently detects five anomaly types:
 4. Incorrect ideal cycle times
 5. Downtime overlapping planned breaks
 
+The dataset includes five labelled ground-truth anomalies for verification.
+
 ## Validation Results
 
-Full-scale dataset generation: PASS
+The following checks passed on the generated full-scale dataset:
 
-Structural validation: PASS
+| Validation | Result |
+|---|---|
+| Full-scale dataset generation | PASS |
+| Structural validation | PASS |
+| Anomaly verification | 5/5 MATCH |
+| Independent OEE verification | 8,100 checked, 0 mismatches |
+| Time reconciliation | PASS |
+| CSV SHA-256 integrity | 13/13 matching |
+| SQLite database integrity | PASS |
+| SQLite row-count verification | 12/12 tables matching |
 
-Anomaly verification: 5/5 MATCH
+### Time Reconciliation Results
 
-Independent OEE verification: 8,100 aggregates checked,
-0 calculation mismatches
-
-Full-scale reproducibility: PASS
-13 CSV files with matching SHA-256 checksums
-
-Time reconciliation:
 - Expected machine-shifts: 8,100
 - Clean reconciled machine-shifts: 8,097
 - Flagged machine-shifts: 3
 - Unexpected problematic shifts: 0
 
+The three flagged machine-shifts contain intentionally injected anomalies.
+
 ## Project Structure
 
+```text
 YottaFlex_OEE_Project/
     backend/
         src/
@@ -93,91 +114,235 @@ YottaFlex_OEE_Project/
             api.py
         tests/
             test_pipeline.py
+        schema.sql
+        load_sqlite.py
+        requirements.txt
         outputs/
             starter/
             full/
     frontend/
         app.py
+        requirements.txt
+    prompts/
+        prompt_history.md
+    DATA_DICTIONARY.md
+    INTERVIEW_GUIDE.md
     README.md
+    .gitignore
+```
+
+Generated datasets and the SQLite database are stored locally under `backend/outputs/`.
+
+They are excluded from GitHub because of their size.
 
 ## How to Run
 
-### Installation (Windows PowerShell)
+### 1. Clone the Repository
 
-Clone the repository:
+Open Windows PowerShell or the VS Code terminal.
 
+```powershell
 git clone https://github.com/nikithaakula1998-max/YottaFlex_OEE_Project.git
+```
 
+Enter the project directory:
+
+```powershell
 cd YottaFlex_OEE_Project
+```
 
-Create and activate a virtual environment:
+### 2. Create a Virtual Environment
 
+```powershell
 py -m venv .venv
+```
 
+Activate the environment:
+
+```powershell
 .\.venv\Scripts\Activate.ps1
+```
 
-Install dependencies:
+If PowerShell blocks activation, run:
 
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
+```
+
+Then activate the environment again.
+
+### 3. Install Dependencies
+
+From the project root, run:
+
+```powershell
 python -m pip install -r backend\requirements.txt
+```
 
+```powershell
 python -m pip install -r frontend\requirements.txt
+```
 
-### Dataset Setup
+### 4. Generate the Full Dataset
 
-The generated datasets are excluded from GitHub
-because of their size.
+Enter the backend folder:
 
-Run the dataset generator before starting the API
-or dashboard.
-
-From the backend folder:
-
+```powershell
 cd backend
+```
 
-cd backend
+Run the generator:
 
-### Generate the full dataset
-
+```powershell
 python -m src.main --profile full --out outputs/full
+```
 
-### Validate anomalies
+The generator creates the synthetic manufacturing CSV files, ground-truth labels, manifest, and validation summary.
 
+### 5. Validate Anomalies
+
+From the backend folder, run:
+
+```powershell
 python -c "from pathlib import Path; import src.validator as v; v.DATA_FOLDER = Path('outputs/full'); assert v.validate()"
+```
 
-### Verify OEE calculations
+Expected result:
 
+```text
+Ground-truth matches: 5/5
+RESULT: PASS
+```
+
+### 6. Verify OEE Calculations
+
+```powershell
 python src/oee_checker.py --folder outputs/full
+```
 
-### Verify time reconciliation
+Expected result:
 
+```text
+OEE aggregates checked: 8100
+Calculation mismatches: 0
+RESULT: PASS
+```
+
+### 7. Verify Time Reconciliation
+
+```powershell
 python src/time_checker.py --folder outputs/full
+```
 
-### Run unit tests
+Expected result:
 
+```text
+Expected machine-shifts: 8100
+Clean reconciled machine-shifts: 8097
+Flagged machine-shifts: 3
+Unexpected problematic shifts: 0
+RESULT: PASS
+```
+
+### 8. Run Unit Tests
+
+```powershell
 python -m unittest discover -s tests -v
+```
 
-### Start FastAPI
+Expected result:
 
+```text
+Ran 1 test
+OK
+```
+
+### 9. Create the SQLite Database
+
+After generating the full dataset, run:
+
+```powershell
+python load_sqlite.py --folder outputs/full --db outputs/full/oee.sqlite
+```
+
+The loader imports all 12 operational CSV datasets into SQLite.
+
+The `ground_truth.csv` file is intentionally excluded to keep the anomaly answers separate from operational data.
+
+The SQLite database is generated locally and is not committed to GitHub.
+
+**Note:** The loader does not overwrite an existing database. If you need to rebuild it, first back up or remove the old `outputs/full/oee.sqlite` file.
+
+### 10. Verify the SQLite Database
+
+From the backend folder, run:
+
+```powershell
+python -c "import sqlite3; c=sqlite3.connect('outputs/full/oee.sqlite'); print('OEE records:',c.execute('SELECT COUNT(*) FROM oee_aggregate').fetchone()[0]); print('Integrity:',c.execute('PRAGMA integrity_check').fetchone()[0]); c.close()"
+```
+
+Expected output:
+
+```text
+OEE records: 8100
+Integrity: ok
+```
+
+The database contains the operational manufacturing records, including the intentionally anomalous records.
+
+Ground-truth labels are kept separately.
+
+### 11. Start the FastAPI Backend
+
+From the backend folder, run:
+
+```powershell
 python -m uvicorn src.api:app --reload
+```
 
-API documentation:
+Open the API documentation:
+
 http://127.0.0.1:8000/docs
 
-### Start Streamlit
+### 12. Start the Streamlit Dashboard
 
 Open another terminal in the main project folder.
 
-python -m streamlit run frontend/app.py
+Activate the virtual environment if needed.
 
-Dashboard:
+Run:
+
+```powershell
+python -m streamlit run frontend/app.py
+```
+
+Open the dashboard:
+
 http://localhost:8501
+
+Keep the FastAPI server running while using the dashboard.
 
 ## Reproducibility
 
-The generator uses the fixed random seed 20261022.
+The generator uses the fixed random seed:
 
-Running the full generator twice with the same configuration
-produced identical SHA-256 checksums for all 13 CSV files.
+```text
+20261022
+```
+
+The full dataset covers 90 days of synthetic manufacturing operations across 30 machines.
+
+Running the full generator twice with the same configuration previously produced identical SHA-256 checksums for all 13 CSV files.
+
+The generated `manifest.json` includes:
+
+- Random seed
+- Generation parameters
+- Dataset row counts
+- SHA-256 checksums
+- Synthetic data provenance
+
+The manifest checksums were independently compared with the generated CSV files, with zero mismatches.
 
 ## API Summary
 
@@ -188,12 +353,30 @@ The full-scale API returned:
 - Labelled anomalies: 5
 - Average OEE: 81.46%
 
-## Notes
+## Data Dictionary
 
-The three flagged machine-shifts contain intentionally
-injected anomalies.
+See `DATA_DICTIONARY.md` for information about the manufacturing datasets and their fields.
 
-The OEE aggregates are computed from source records after
-excluding labelled anomalous records.
+## AI Assistance Disclosure
 
-The project uses synthetic manufacturing data only.
+AI assistance was used during project development for implementation guidance, debugging, testing, and documentation.
+
+See `prompts/prompt_history.md` for the currently documented AI-assistance information.
+
+The existing file is a summary of AI use; it should not be treated as a complete transcript of all original prompts.
+
+## Notes and Limitations
+
+- All manufacturing data is synthetic.
+- The generated CSV and SQLite files are excluded from version control.
+- The dataset contains intentionally injected anomalies.
+- Ground-truth labels are stored separately from the operational SQLite database.
+- OEE aggregates are computed from source records after excluding labelled anomalous records.
+- SQLite foreign-key enforcement is disabled during bulk import to preserve generated records. Database integrity checking and row-count verification have passed, but those checks do not establish full referential integrity.
+- The project is intended for synthetic manufacturing analytics and validation demonstrations.
+
+## Repository
+
+GitHub:
+
+https://github.com/nikithaakula1998-max/YottaFlex_OEE_Project
