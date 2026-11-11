@@ -3,18 +3,22 @@
 
 ## Project Overview
 
-This project generates and analyzes synthetic manufacturing data to calculate Overall Equipment Effectiveness (OEE).
+This project generates, validates, stores, and analyzes synthetic manufacturing data to calculate Overall Equipment Effectiveness (OEE).
 
 The system includes:
 
 - A deterministic manufacturing data generator
-- Anomaly detection and validation
+- Production-count correction history
+- Anomaly detection and ground-truth validation
 - OEE calculation and independent verification
 - Machine-shift time reconciliation
 - A FastAPI backend
-- A Streamlit dashboard
+- A Streamlit analytics dashboard
 - SQLite database support
 - Dataset integrity verification using SHA-256 checksums
+- Automated unit tests
+
+All manufacturing data is synthetic.
 
 ## Technologies Used
 
@@ -36,18 +40,22 @@ The system includes:
 | Machines | 30 |
 | Products | 20 |
 | Shifts | 270 |
+| Machine-product relationships | 600 |
 | Production orders | 8,100 |
+| Downtime reasons | 4 |
 | State events | 100,000 |
 | Production counts | 250,000 |
 | Quality inspections | 250,000 |
 | OEE aggregates | 8,100 |
 | Ground-truth anomalies | 5 |
 
-The dataset is fully synthetic and does not contain real manufacturing or personal data.
+The full dataset represents 90 days of synthetic manufacturing activity.
+
+Generated CSV files and SQLite databases are excluded from GitHub because of their size. They can be recreated using the generator and database loader.
 
 ## OEE Calculation
 
-Overall Equipment Effectiveness is calculated using three factors.
+Overall Equipment Effectiveness is calculated using three components.
 
 **Availability**
 
@@ -55,7 +63,7 @@ Availability = Run Time / Planned Production Time
 
 **Performance**
 
-Performance = (Total Units * Ideal Cycle Time) / Run Time
+Performance = (Total Units × Ideal Cycle Time) / Run Time
 
 **Quality**
 
@@ -63,43 +71,77 @@ Quality = Good Units / Total Units
 
 **Overall OEE**
 
-OEE = Availability * Performance * Quality
+OEE = Availability × Performance × Quality
+
+Planned breaks are excluded from planned production time. The generator uses a 480-minute shift with a 30-minute planned break, resulting in 450 minutes of planned production time.
+
+OEE aggregates are derived from the generated manufacturing records. The independent checker recomputes these values and reports mismatches.
+
+## Production Count Correction History
+
+The `production_count` dataset supports corrections using the `correction_of` field.
+
+A correction:
+
+- Has its own unique count ID
+- References an existing original count
+- Belongs to the same production order
+- Has a timestamp later than the referenced count
+- Uses a signed adjustment instead of deleting the original record
+
+The full dataset contains one valid linked correction with an adjustment of `-1`.
+
+The original and correction records are both retained in the generated dataset and imported into SQLite.
+
+The generator also deliberately creates a separate invalid negative-count example without a correction reference. This is used to test anomaly detection.
+
+The correction relationship is validated in the generated CSV data and has been verified after SQLite import.
 
 ## Anomaly Detection
 
-The validator independently detects five anomaly types:
+The independent validator checks for five deliberately injected anomaly types:
 
-1. Overlapping machine states
+1. Overlapping machine-state intervals
 2. Negative production counts without corrections
 3. Scrap quantities exceeding production totals
 4. Incorrect ideal cycle times
 5. Downtime overlapping planned breaks
 
-The dataset includes five labelled ground-truth anomalies for verification.
+The expected anomalies are documented in `ground_truth.csv`.
 
-## Validation Results
+Ground-truth labels are kept separate from the operational SQLite tables.
 
-The following checks passed on the generated full-scale dataset:
+The validator checks whether the expected anomalies are detected. A successful ground-truth match does not establish that every possible unexpected anomaly has been detected.
 
-| Validation | Result |
+## Verified Validation Results
+
+The following results were obtained from the updated full-scale dataset generated in `outputs/full_correction_test`.
+
+| Validation | Verified result |
 |---|---|
-| Full-scale dataset generation | PASS |
+| Full-scale generation | PASS |
 | Structural validation | PASS |
-| Anomaly verification | 5/5 MATCH |
+| Valid linked correction | 1 |
+| Independent anomaly validation | 5/5 matched |
 | Independent OEE verification | 8,100 checked, 0 mismatches |
 | Time reconciliation | PASS |
-| CSV SHA-256 integrity | 13/13 matching |
-| SQLite database integrity | PASS |
-| SQLite row-count verification | 12/12 tables matching |
+| SQLite integrity check | ok |
+| SQLite foreign-key check | 0 violations |
+| Production-count rows in SQLite | 250,000 |
+| Quality-inspection rows in SQLite | 250,000 |
+| OEE aggregate rows in SQLite | 8,100 |
+| Automated unit tests | 4/4 PASS |
 
-### Time Reconciliation Results
+### Time Reconciliation
 
 - Expected machine-shifts: 8,100
 - Clean reconciled machine-shifts: 8,097
 - Flagged machine-shifts: 3
 - Unexpected problematic shifts: 0
 
-The three flagged machine-shifts contain intentionally injected anomalies.
+The three flagged machine-shifts contain deliberately injected anomalies.
+
+The updated generator was also tested with a smaller starter dataset before the full-scale run.
 
 ## Project Structure
 
@@ -118,8 +160,6 @@ YottaFlex_OEE_Project/
         load_sqlite.py
         requirements.txt
         outputs/
-            starter/
-            full/
     frontend/
         app.py
         requirements.txt
@@ -131,23 +171,16 @@ YottaFlex_OEE_Project/
     .gitignore
 ```
 
-Generated datasets and the SQLite database are stored locally under `backend/outputs/`.
-
-They are excluded from GitHub because of their size.
+The `backend/outputs/` directory is used for generated datasets and SQLite databases.
 
 ## How to Run
 
 ### 1. Clone the Repository
 
-Open Windows PowerShell or the VS Code terminal.
+Open Windows PowerShell or a terminal.
 
 ```powershell
 git clone https://github.com/nikithaakula1998-max/YottaFlex_OEE_Project.git
-```
-
-Enter the project directory:
-
-```powershell
 cd YottaFlex_OEE_Project
 ```
 
@@ -157,7 +190,7 @@ cd YottaFlex_OEE_Project
 py -m venv .venv
 ```
 
-Activate the environment:
+Activate it:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -173,13 +206,10 @@ Then activate the environment again.
 
 ### 3. Install Dependencies
 
-From the project root, run:
+From the project root:
 
 ```powershell
 python -m pip install -r backend\requirements.txt
-```
-
-```powershell
 python -m pip install -r frontend\requirements.txt
 ```
 
@@ -191,17 +221,23 @@ Enter the backend folder:
 cd backend
 ```
 
-Run the generator:
+Run:
 
 ```powershell
 python -m src.main --profile full --out outputs/full
 ```
 
-The generator creates the synthetic manufacturing CSV files, ground-truth labels, manifest, and validation summary.
+The generator creates synthetic manufacturing CSV files, ground-truth labels, a manifest, and a validation summary.
+
+To create a smaller dataset:
+
+```powershell
+python -m src.main --profile starter --out outputs/starter
+```
 
 ### 5. Validate Anomalies
 
-From the backend folder, run:
+From the backend folder:
 
 ```powershell
 python -c "from pathlib import Path; import src.validator as v; v.DATA_FOLDER = Path('outputs/full'); assert v.validate()"
@@ -214,7 +250,7 @@ Ground-truth matches: 5/5
 RESULT: PASS
 ```
 
-### 6. Verify OEE Calculations
+### 6. Independently Verify OEE
 
 ```powershell
 python src/oee_checker.py --folder outputs/full
@@ -244,7 +280,7 @@ Unexpected problematic shifts: 0
 RESULT: PASS
 ```
 
-### 8. Run Unit Tests
+### 8. Run Automated Tests
 
 ```powershell
 python -m unittest discover -s tests -v
@@ -253,62 +289,66 @@ python -m unittest discover -s tests -v
 Expected result:
 
 ```text
-Ran 1 test
+Ran 4 tests
 OK
 ```
 
-### 9. Create the SQLite Database
+The automated tests cover:
 
-After generating the full dataset, run:
+- Deterministic reproducibility
+- Relationship integrity
+- OEE arithmetic
+- Independent anomaly validation
+
+### 9. Create the SQLite Database
 
 ```powershell
 python load_sqlite.py --folder outputs/full --db outputs/full/oee.sqlite
 ```
 
-The loader imports all 12 operational CSV datasets into SQLite.
+The loader imports the 12 operational CSV datasets into SQLite.
 
-The `ground_truth.csv` file is intentionally excluded to keep the anomaly answers separate from operational data.
+`ground_truth.csv` is intentionally excluded from the operational database.
 
-The SQLite database is generated locally and is not committed to GitHub.
+The loader refuses to overwrite an existing database. To rebuild it, use a new database path or back up and remove the existing database first.
 
-**Note:** The loader does not overwrite an existing database. If you need to rebuild it, first back up or remove the old `outputs/full/oee.sqlite` file.
+### 10. Verify SQLite Integrity
 
-### 10. Verify the SQLite Database
-
-From the backend folder, run:
+From the backend folder:
 
 ```powershell
-python -c "import sqlite3; c=sqlite3.connect('outputs/full/oee.sqlite'); print('OEE records:',c.execute('SELECT COUNT(*) FROM oee_aggregate').fetchone()[0]); print('Integrity:',c.execute('PRAGMA integrity_check').fetchone()[0]); c.close()"
+python -c "import sqlite3; c=sqlite3.connect('outputs/full/oee.sqlite'); print('Integrity:',c.execute('PRAGMA integrity_check').fetchone()[0]); print('Foreign key violations:',len(c.execute('PRAGMA foreign_key_check').fetchall())); print('OEE records:',c.execute('SELECT COUNT(*) FROM oee_aggregate').fetchone()[0]); c.close()"
 ```
 
 Expected output:
 
 ```text
-OEE records: 8100
 Integrity: ok
+Foreign key violations: 0
+OEE records: 8100
 ```
 
-The database contains the operational manufacturing records, including the intentionally anomalous records.
+The loader disables foreign-key enforcement during bulk import. A separate foreign-key check is therefore important.
 
-Ground-truth labels are kept separately.
+A passing SQLite foreign-key check verifies declared relationships, but does not establish that every domain-specific business rule is satisfied.
 
 ### 11. Start the FastAPI Backend
 
-From the backend folder, run:
+From the backend folder:
 
 ```powershell
 python -m uvicorn src.api:app --reload
 ```
 
-Open the API documentation:
+Open the interactive API documentation:
 
 http://127.0.0.1:8000/docs
 
+The backend exposes endpoints for health, summary information, machines, OEE records, labelled anomalies, and dataset manifest information.
+
 ### 12. Start the Streamlit Dashboard
 
-Open another terminal in the main project folder.
-
-Activate the virtual environment if needed.
+Open another terminal in the main project folder and activate the virtual environment.
 
 Run:
 
@@ -316,7 +356,7 @@ Run:
 python -m streamlit run frontend/app.py
 ```
 
-Open the dashboard:
+Open:
 
 http://localhost:8501
 
@@ -330,53 +370,51 @@ The generator uses the fixed random seed:
 20261022
 ```
 
-The full dataset covers 90 days of synthetic manufacturing operations across 30 machines.
+The manifest records generation parameters, row counts, provenance information, and SHA-256 checksums.
 
-Running the full generator twice with the same configuration previously produced identical SHA-256 checksums for all 13 CSV files.
+Earlier full-scale generation runs were checked for matching CSV checksums across repeated runs.
 
-The generated `manifest.json` includes:
+The automated reproducibility test also checks deterministic generation on a smaller dataset.
 
-- Random seed
-- Generation parameters
-- Dataset row counts
-- SHA-256 checksums
-- Synthetic data provenance
+The updated full-scale dataset has passed independent anomaly, OEE, time-reconciliation, and SQLite checks. A separate repeated full-scale checksum comparison for this updated generator has not yet been documented.
 
-The manifest checksums were independently compared with the generated CSV files, with zero mismatches.
+## API and Dashboard
 
-## API Summary
-
-The full-scale API returned:
+The previously verified full-scale API and dashboard displayed:
 
 - Machines: 30
 - Machine-shifts: 8,100
 - Labelled anomalies: 5
 - Average OEE: 81.46%
 
+The dashboard includes OEE component charts, machine comparisons, shift trends, machine filtering, and anomaly information.
+
+The dashboard displays known ground-truth anomaly labels; it should not be confused with a live anomaly-detection service.
+
 ## Data Dictionary
 
-See `DATA_DICTIONARY.md` for information about the manufacturing datasets and their fields.
+See `DATA_DICTIONARY.md` for dataset descriptions, fields, relationships, data types, allowed values, and validation rules.
 
 ## AI Assistance Disclosure
 
-AI assistance was used during project development for implementation guidance, debugging, testing, and documentation.
+AI assistance was used during development for implementation guidance, debugging, testing, and documentation.
 
-See `prompts/prompt_history.md` for the currently documented AI-assistance information.
+See `prompts/prompt_history.md` for the documented AI-assistance summary.
 
-The existing file is a summary of AI use; it should not be treated as a complete transcript of all original prompts.
+That file is a summary rather than a complete verbatim transcript of every prompt.
 
 ## Notes and Limitations
 
 - All manufacturing data is synthetic.
-- The generated CSV and SQLite files are excluded from version control.
-- The dataset contains intentionally injected anomalies.
-- Ground-truth labels are stored separately from the operational SQLite database.
-- OEE aggregates are computed from source records after excluding labelled anomalous records.
-- SQLite foreign-key enforcement is disabled during bulk import to preserve generated records. Database integrity checking and row-count verification have passed, but those checks do not establish full referential integrity.
-- The project is intended for synthetic manufacturing analytics and validation demonstrations.
+- Generated CSV files and SQLite databases are excluded from GitHub.
+- Five deliberately injected anomalies are included for evaluation.
+- Ground-truth labels are stored separately from operational SQLite data.
+- OEE calculations exclude or quarantine labelled anomalous records according to the generator's documented calculation rules.
+- The generator represents production orders with final statuses; it does not provide a complete event-by-event history of transitions from planned to running to completed or cancelled.
+- State events and production-count corrections provide partial event-history traceability, but not a complete append-only audit system for every entity.
+- SQLite integrity and foreign-key checks have passed on the updated full-scale test database. Additional domain-rule validation would strengthen the project.
+- The system is intended for synthetic manufacturing analytics, evaluation, and demonstration, not direct deployment to production manufacturing systems.
 
 ## Repository
-
-GitHub:
 
 https://github.com/nikithaakula1998-max/YottaFlex_OEE_Project
