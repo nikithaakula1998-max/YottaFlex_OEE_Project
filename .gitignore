@@ -1,5 +1,35 @@
+
+# Python virtual environments
 .venv/
+venv/
+env/
+
+# Python cache files
 __pycache__/
 *.pyc
+*.pyo
+.pytest_cache/
+
+# Generated datasets and databases
 backend/outputs/
+*.sqlite
+*.sqlite3
+*.db
+
+# Local environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# Streamlit local configuration
 .streamlit/
+
+# Editor and operating system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.log
+*.tmp
