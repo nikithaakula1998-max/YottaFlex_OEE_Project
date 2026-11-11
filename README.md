@@ -15,6 +15,7 @@ The system includes:
 - A FastAPI backend
 - A Streamlit analytics dashboard
 - SQLite database support
+- SQLite-compatible SQL seed export
 - Dataset integrity verification using SHA-256 checksums
 - Automated unit tests
 
@@ -131,6 +132,8 @@ The following results were obtained from the updated full-scale dataset generate
 | Quality-inspection rows in SQLite | 250,000 |
 | OEE aggregate rows in SQLite | 8,100 |
 | Automated unit tests | 4/4 PASS |
+| Full-scale reproducibility | 13/13 CSV checksum matches |
+| SQL export script test | PASS |
 
 ### Time Reconciliation
 
@@ -158,6 +161,7 @@ YottaFlex_OEE_Project/
             test_pipeline.py
         schema.sql
         load_sqlite.py
+        export_sql.py
         requirements.txt
         outputs/
     frontend/
@@ -171,7 +175,7 @@ YottaFlex_OEE_Project/
     .gitignore
 ```
 
-The `backend/outputs/` directory is used for generated datasets and SQLite databases.
+The `backend/outputs/` directory is used for generated datasets, SQLite databases, and SQL exports.
 
 ## How to Run
 
@@ -332,7 +336,27 @@ The loader disables foreign-key enforcement during bulk import. A separate forei
 
 A passing SQLite foreign-key check verifies declared relationships, but does not establish that every domain-specific business rule is satisfied.
 
-### 11. Start the FastAPI Backend
+### 11. Export a SQLite-Compatible SQL Seed
+
+From the backend folder:
+
+```powershell
+python export_sql.py --db outputs/full/oee.sqlite --out outputs/full/oee_seed.sql
+```
+
+The exporter verifies database integrity and foreign-key relationships before writing the SQL file.
+
+The exported file contains SQLite-compatible SQL statements that can recreate the operational database.
+
+It does not include `ground_truth.csv`, which is deliberately kept separate.
+
+The exporter refuses to overwrite an existing SQL file. Choose a different output path if needed.
+
+Generated SQL exports under `backend/outputs/` are excluded from GitHub because of their size.
+
+The SQL export script was tested successfully against the updated full-scale SQLite database.
+
+### 12. Start the FastAPI Backend
 
 From the backend folder:
 
@@ -346,7 +370,7 @@ http://127.0.0.1:8000/docs
 
 The backend exposes endpoints for health, summary information, machines, OEE records, labelled anomalies, and dataset manifest information.
 
-### 12. Start the Streamlit Dashboard
+### 13. Start the Streamlit Dashboard
 
 Open another terminal in the main project folder and activate the virtual environment.
 
@@ -372,11 +396,15 @@ The generator uses the fixed random seed:
 
 The manifest records generation parameters, row counts, provenance information, and SHA-256 checksums.
 
-Earlier full-scale generation runs were checked for matching CSV checksums across repeated runs.
-
 The automated reproducibility test also checks deterministic generation on a smaller dataset.
 
-The updated full-scale dataset has passed independent anomaly, OEE, time-reconciliation, and SQLite checks. A separate repeated full-scale checksum comparison for this updated generator has not yet been documented.
+The updated full-scale generator was independently tested twice using the same seed (`20261022`).
+
+Both runs produced identical row counts and matching SHA-256 checksums for all 13 generated CSV files.
+
+**Full-scale reproducibility result: 13/13 matches, zero mismatches — PASS.**
+
+The updated dataset also passed independent anomaly validation, OEE verification, time reconciliation, SQLite integrity checks, and all four automated unit tests.
 
 ## API and Dashboard
 
@@ -407,12 +435,14 @@ That file is a summary rather than a complete verbatim transcript of every promp
 
 - All manufacturing data is synthetic.
 - Generated CSV files and SQLite databases are excluded from GitHub.
+- Generated SQL seed files under `backend/outputs/` are excluded from GitHub.
 - Five deliberately injected anomalies are included for evaluation.
 - Ground-truth labels are stored separately from operational SQLite data.
 - OEE calculations exclude or quarantine labelled anomalous records according to the generator's documented calculation rules.
 - The generator represents production orders with final statuses; it does not provide a complete event-by-event history of transitions from planned to running to completed or cancelled.
 - State events and production-count corrections provide partial event-history traceability, but not a complete append-only audit system for every entity.
 - SQLite integrity and foreign-key checks have passed on the updated full-scale test database. Additional domain-rule validation would strengthen the project.
+- The SQL export uses SQLite-compatible syntax and is not guaranteed to work unchanged with other database engines.
 - The system is intended for synthetic manufacturing analytics, evaluation, and demonstration, not direct deployment to production manufacturing systems.
 
 ## Repository
